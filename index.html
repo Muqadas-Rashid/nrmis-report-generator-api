@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NRMIS Report Generator</title>
+
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lobibox@1.2.7/dist/css/lobibox.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lobibox@1.2.7/dist/js/lobibox.min.js"></script>
+
+  <style>
+    .lobibox-notify-container {
+      z-index: 100001 !important;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #fff;
+      font-family: Arial, sans-serif;
+    }
+
+    .lobibox-notify {
+      position: fixed !important;
+      z-index: 2147483647 !important;
+      /* Higher than #blank */
+    }
+
+    #blank {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+      /* Keep this lower than Lobibox */
+    }
+
+    #fleetId {
+      padding: 0.5rem 1rem;
+      font-size: 16px;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      width: 250px;
+    }
+
+    button {
+      position: relative;
+      overflow: hidden;
+      padding: 0.5rem 1.2rem;
+      font-size: 16px;
+      background-color: #0f1e44;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      min-width: 160px;
+      height: 40px;
+    }
+
+    button:hover {
+      background-color: #203d88;
+    }
+
+    .btn-text {
+      position: relative;
+      z-index: 2;
+    }
+
+    .btn-loader {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 32px;
+      height: 32px;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 3;
+    }
+
+    .btn-loader div {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background: white;
+      border-radius: 50%;
+      animation: rotate 1.2s linear infinite;
+    }
+
+    .btn-loader div:nth-child(1) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(0deg) translateY(-12px);
+      animation-delay: 0s;
+    }
+
+    .btn-loader div:nth-child(2) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(45deg) translateY(-12px);
+      animation-delay: 0.15s;
+    }
+
+    .btn-loader div:nth-child(3) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(90deg) translateY(-12px);
+      animation-delay: 0.3s;
+    }
+
+    .btn-loader div:nth-child(4) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(135deg) translateY(-12px);
+      animation-delay: 0.45s;
+    }
+
+    .btn-loader div:nth-child(5) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(180deg) translateY(-12px);
+      animation-delay: 0.6s;
+    }
+
+    .btn-loader div:nth-child(6) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(225deg) translateY(-12px);
+      animation-delay: 0.75s;
+    }
+
+    .btn-loader div:nth-child(7) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(270deg) translateY(-12px);
+      animation-delay: 0.9s;
+    }
+
+    .btn-loader div:nth-child(8) {
+      top: 1rem;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(315deg) translateY(-12px);
+      animation-delay: 1.05s;
+    }
+
+    @keyframes rotate {
+      0% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="blank">
+    <input type="text" id="fleetId" placeholder="Enter Fleet ID" />
+    <button id="generateBtn" onclick="fetchReportDataAndGeneratePDF()">
+      <span class="btn-text">Generate PDF</span>
+      <div class="btn-loader">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+    </button>
+  </div>
+
+  <script src="reportGenerator.js"></script>
+  <script>
+    const reportData = {
+      clientName: '',
+      issueDate: '',
+      summary: {},
+      nrTypes: [],
+      comparison: {},
+      portfolioComparison: [],
+      entries: [],
+      chartData: {}
+    };
+
+    function showNotification(type, title, message) {
+      try {
+        if (typeof Lobibox !== 'undefined' && Lobibox.notify) {
+          Lobibox.notify(type, {
+            title: title,
+            msg: message,
+            position: 'top left',
+            sound: false,
+            icon: type === 'error' ? 'fa fa-times-circle' :
+              type === 'success' ? 'fa fa-check-circle' : 'fa fa-exclamation-circle'
+          });
+        } else {
+          // Fallback to basic alert
+          alert(`${title}: ${message}`);
+        }
+      } catch (e) {
+        console.error('Notification error:', e);
+        alert(`${title}: ${message}`);
+      }
+    }
+
+    async function fetchReportDataAndGeneratePDF() {
+      const fleetId = document.getElementById('fleetId').value.trim();
+      if (!fleetId) {
+        showNotification('warning', 'Missing Information', 'Fleet ID is required.');
+        return;
+      }
+
+      const button = document.getElementById("generateBtn");
+      const btnText = button.querySelector('.btn-text');
+      const loadingBar = button.querySelector('.btn-loader');
+      button.disabled = true;
+      btnText.textContent = '';
+      loadingBar.style.display = 'block';
+
+      try {
+        const formData = new FormData();
+        formData.append('FleetId', fleetId);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+
+        const response = await fetch('http://iot.itecknologi.com/NRreportPotoflio/api.php', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+        const apiData = await response.json();
+
+        if (!apiData || !Array.isArray(apiData.nr_vehicles) || apiData.nr_vehicles.length === 0) {
+          showNotification('error', 'Invalid Data', 'Fleet ID is invalid.');
+          button.disabled = false;
+          btnText.textContent = 'Generate PDF';
+          loadingBar.style.display = 'none';
+          return;
+        }
+
+        reportData.clientName = apiData["Client Name"] || "Unknown Client";
+        reportData.issueDate = new Date().toLocaleDateString('en-GB', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        });
+
+        reportData.summary = {
+          reporting: apiData.reporting_count || 0,
+          notReporting: apiData.Not_reporting_count || 0,
+          totalPortfolio: apiData.portfoliocount || 0
+        };
+
+        reportData.nrTypes = [
+          { name: "NO CONTACT / NON-COOPERATIVE", quantity: 30 },
+          { name: "LOW GSM/NON GSM AREA", quantity: 2 },
+          { name: "PARKED FOR PROLONGED PERIOD", quantity: 28 },
+          { name: "SCHEDULED FOR REDO", quantity: 40 },
+          { name: "TOTAL LOSS / UNDER REPAIR", quantity: 7 },
+          { name: "THIRD PARTY SOLD", quantity: 1 }
+        ];
+
+        reportData.comparison = {
+          previousTotal: 2076,
+          currentTotal: 2176,
+          previousNRCount: 123,
+          currentNRCount: 115,
+          previousNRPercentage: 5.9,
+          currentNRPercentage: 5.3
+        };
+
+        reportData.portfolioComparison = [
+          { type: "NO CONTACT / NON-COOPERATIVE", earlier: 30, today: 30 },
+          { type: "LOW GSM/NON GSM AREA", earlier: 2, today: 2 },
+          { type: "PARKED FOR PROLONGED PERIOD", earlier: 28, today: 28 },
+          { type: "SCHEDULED FOR REDO", earlier: 47, today: 47 },
+          { type: "TOTAL LOSS/UNDER REPAIR", earlier: 7, today: 7 },
+          { type: "THIRD PARTY SOLD", earlier: 1, today: 1 }
+        ];
+
+        reportData.entries = apiData.nr_vehicles.map((v, idx) => ({
+          sno: idx + 1,
+          reg: v.reg_number || '-',
+          name: v.username || '-',
+          make: '-',
+          engine: v.engine || '-',
+          chassis: v.chassis || '-',
+          model: '-',
+          nrDate: v.nr_date || '-',
+          aging: v.aging || '-'
+        }));
+
+        reportData.chartData = {
+          reportingPie: {
+            labels: ['Reporting', 'Not Reporting'],
+            data: [reportData.summary.reporting, reportData.summary.notReporting],
+            colors: ['#5087bb', '#95b7df']
+          },
+          itPie: {
+            labels: ['IT Issues', 'Other Issues'],
+            data: [3224, 159082],
+            colors: ['#3c66b1', '#a3a3a3']
+          },
+          portfolioPie: {
+            labels: ['NO CONTACT / NON-COOPERATIVE', 'LOW GSM/NON GSM AREA', 'SCHEDULED FOR REDO', 'TOTAL LOSS / UNDER REPAIR', 'THIRD PARTY SOLD'],
+            data: [35, 2, 54, 8, 1],
+            colors: ['#ed7d31', '#ffc000', '#70ad47', '#9e480e', '#997300']
+          },
+          barChart: {
+            labels: ['30 Days Earlier', 'Today'],
+            datasets: [
+              { label: 'Total Portfolio', data: [2076, 2176], color: '#3a6cc6' },
+              { label: 'NR Count', data: [123, 115], color: '#ee7420' }
+            ]
+          }
+        };
+
+        await generateNRMISReport(reportData);
+
+        document.getElementById('fleetId').value = '';
+        showNotification('success', 'Success', 'PDF generated successfully!');
+
+
+      } catch (err) {
+        console.error("PDF Generation Error:", err);
+        showNotification('error', 'Error', 'Something went wrong while generating the report.');
+        return;
+
+      } finally {
+        button.disabled = false;
+        btnText.textContent = 'Generate PDF';
+        loadingBar.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+
+</html>
